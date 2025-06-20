@@ -1,0 +1,65 @@
+<!-- site/_includes/blog-layout.html -->
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title }}</title>
+    <meta name="description" content="{{ description }}">
+    <link rel="canonical" href="https://mathstairs.com{{ page.url }}">
+    <style>
+      body {
+        font-family: sans-serif;
+        font-size: 20px;
+        margin: 0;
+        padding: 1rem;
+        line-height: 1.6;
+      }
+      header {
+        background: #222;
+        color: white;
+        padding: 1rem;
+        text-align: center;
+      }
+      article {
+        max-width: 600px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 2.4rem;
+        margin-top: 0;
+      }
+    </style>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ER26NTYFVN"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-ER26NTYFVN');
+    </script>
+  </head>
+  <body>
+    <nav style="
+    padding: 1em 2em;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.5em;
+    font-size: 1rem;
+    text-align: center;
+  ">
+    <a href="/" style="text-decoration: none; color: #333;">Home</a>
+    <!-- <a href="/why-addition-is-easy" style="text-decoration: none; color: #333;">Addition Is Easy</a>
+    <a href="/why-your-child-is-struggling" style="text-decoration: none; color: #333;">Why Your Child Is Struggling</a>
+    <a href="/hidden-reason-child-struggles" style="text-decoration: none; color: #333;">Hidden Reason Child Struggles</a>
+    <a href="/why-fast-math-isnt-rushed" style="text-decoration: none; color: #333;">Why Fast Math Isn't Rushed</a>
+    <a href="/the-power-of-small-wins" style="text-decoration: none; color: #333;">Power of Small Wins</a>
+    <a href="/why-most-apps-fail-fluency" style="text-decoration: none; color: #333;">Why Most Apps Fail</a> -->
+  </nav>
+  
+  
+  
+    <article>
+      {{ content }}
+    </article>
+  </body>
+</html>

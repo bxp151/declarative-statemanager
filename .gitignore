@@ -1,0 +1,69 @@
+# Flutter/Dart
+**/build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+.idea/
+.vscode/
+*.iml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+.eggs/
+.venv
+env/
+venv/
+ENV/
+build/
+dist/
+pip-wheel-metadata/
+*.log
+
+# Byte-compiled, temporary, and other files
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.orig
+
+# IDE and Editor specific
+*.vscode/
+*.idea/
+*.project
+*.settings
+*.classpath
+
+# MacOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+*.out
+*.err
+*.log.*
+
+# Miscellaneous
+*.lock
+*.tmp
+*.bak
+*.swp
+*.zip
+*.tar.gz
+*.sqlite
+*.ipynb_checkpoints/
+node_modules/
+coverage/
+
+# Database file
+*.db
