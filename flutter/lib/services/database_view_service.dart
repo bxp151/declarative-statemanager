@@ -1,7 +1,7 @@
 // file: database_view_serivce.dart
 
 import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_creation_service.dart';
+import 'package:demo/services/database_creation_service.dart';
 
 class DatabaseViewService {
   DatabaseViewService._internal();

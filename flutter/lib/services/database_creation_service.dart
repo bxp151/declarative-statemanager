@@ -1,7 +1,7 @@
 // file: database_creation_serivce.dart
 
 import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_table_service.dart';
+import 'package:demo/services/database_table_service.dart';
 
 class DatabaseCreationService {
   DatabaseCreationService._internal();
@@ -17,6 +17,5 @@ class DatabaseCreationService {
 
   Future<void> _onCreate(Database db, int version) async {
     await DatabaseTableService().onCreate(db, version);
-    // await ProgressionViewService().onCreate(db, version);
   }
 }

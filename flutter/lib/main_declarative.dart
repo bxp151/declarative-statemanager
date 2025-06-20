@@ -1,7 +1,16 @@
 // file: main.dart
 import 'package:flutter/material.dart';
+import 'package:demo/managers/dispatch_manager.dart';
+import 'package:demo/managers/state_manager.dart';
+import 'package:demo/services/database_view_service.dart';
+import 'package:demo/services/database_table_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final stateDb = await DatabaseTableService().database;
+  await DatabaseViewService().createOrReplaceViews(stateDb);
+  await StateManager().startEvaluatorLoop();
   runApp(const MyApp());
 }
 
@@ -29,16 +38,26 @@ class DemoScaffold extends StatefulWidget {
 }
 
 class _DemoScaffoldState extends State<DemoScaffold> {
+  // Create the GlobalKeys used access and update BoxWidget states
   final GlobalKey<BoxWidgetState> boxAkey = GlobalKey<BoxWidgetState>();
   final GlobalKey<BoxWidgetState> boxBkey = GlobalKey<BoxWidgetState>();
+  @override
+  void initState() {
+    super.initState();
+    // Register GlobalKeys with DispatchManager for external state control
+    DispatchManager().registerBoxAkey(boxAkey);
+    DispatchManager().registerBoxBkey(boxBkey);
+  }
 
   bool switchA = false;
   bool switchB = false;
 
-  void _handleSwitchA(bool value) {
+  void handleSwitchA(bool value) {
     setState(() {
       switchA = value;
     });
+    StateManager().insertStateLogEntry(
+        stateName: 'switchAvalue', stateValue: switchA.toString());
     print("Switch A toggled: $value");
   }
 
@@ -46,20 +65,22 @@ class _DemoScaffoldState extends State<DemoScaffold> {
     setState(() {
       switchB = value;
     });
+    StateManager().insertStateLogEntry(
+        stateName: 'switchBvalue', stateValue: switchB.toString());
     print("Switch B toggled: $value");
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('State Manager Demo')),
+      appBar: AppBar(title: const Text('Declarative State')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             SwitchListTile(
               title: const Text('Switch A'),
-              onChanged: _handleSwitchA,
+              onChanged: handleSwitchA,
               value: switchA,
             ),
             SwitchListTile(

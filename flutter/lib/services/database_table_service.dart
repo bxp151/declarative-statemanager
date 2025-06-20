@@ -1,5 +1,5 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_creation_service.dart';
+import 'package:demo/services/database_creation_service.dart';
 
 class DatabaseTableService {
   DatabaseTableService._internal();
@@ -16,7 +16,7 @@ class DatabaseTableService {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    await createEvalStatusStateLogTable(db);
+    await createStateLogTable(db);
   }
 
   Future<Database> get database async {
@@ -31,7 +31,7 @@ class DatabaseTableService {
     return _database!;
   }
 
-  Future<void> createEvalStatusStateLogTable(Database db) async {
+  Future<void> createStateLogTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS state_log (
         stateLogID  INTEGER PRIMARY KEY AUTOINCREMENT,

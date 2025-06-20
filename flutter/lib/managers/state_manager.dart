@@ -1,7 +1,7 @@
 // file: state_manager.dart
-import 'package:automath/daos/state_manager_dao.dart';
+import 'package:demo/daos/state_manager_dao.dart';
 import 'dart:async';
-import 'package:automath/managers/dispatch_manager.dart';
+import 'package:demo/managers/dispatch_manager.dart';
 
 class StateManager {
   // Singleton instance
@@ -46,7 +46,7 @@ class StateManager {
       final stateValue = row['stateValue'] as String;
       await StateManagerDao()
           .upsertWidgetBuildStatusAndTimestamp(stateName: stateName);
-      // DispatchManager().stateUpdate[stateName]?.call(stateValue);
+      DispatchManager().stateUpdate[stateName]?.call(stateValue);
     }
   }
 }
