@@ -1,0 +1,385 @@
+// file: dipatch_manager.dart
+
+// import 'package:automath/widgets/feedback_tray_widget.dart';
+import 'package:flutter/widgets.dart';
+
+class DispatchManager {
+  // Singleton instance
+  static final DispatchManager _instance = DispatchManager._internal();
+  factory DispatchManager() => _instance;
+  DispatchManager._internal();
+
+  // Registers the GlobalKey
+  // GlobalKey<FeedbackTrayWidgetState>? feedbackTrayKey;
+  // void registerFeedbackTrayKey(GlobalKey<FeedbackTrayWidgetState> key) {
+  //   feedbackTrayKey = key;
+  // }
+
+  // Call widget rebuild using the GlobalKey
+  // Map<String, void Function(String)> get stateUpdate => {
+  //       'evalStatus': (value) =>
+  //           feedbackTrayKey?.currentState?.updateEvalStatus(value),
+  //     };
+}
+// file: state_manager.dart
+import 'package:automath/daos/state_manager_dao.dart';
+import 'dart:async';
+import 'package:automath/managers/dispatch_manager.dart';
+
+class StateManager {
+  // Singleton instance
+  static final StateManager _instance = StateManager._internal();
+  factory StateManager() => _instance;
+  StateManager._internal();
+
+  late Timer evaluatorTimer;
+  bool _isEvaluatorRunning = false;
+
+  // Insert a state log entry
+  Future<void> insertStateLogEntry(
+      {required String stateName, required stateValue}) async {
+    await StateManagerDao().insertStateLogEntry(stateName, stateValue);
+  }
+
+  // Checks every 100ms if there are any dirty states
+  Future<void> startEvaluatorLoop() async {
+    evaluatorTimer = Timer.periodic(Duration(milliseconds: 100), (_) async {
+      if (_isEvaluatorRunning) return;
+
+      _isEvaluatorRunning = true;
+      try {
+        await updateWidgetsIfNeeded();
+      } finally {
+        _isEvaluatorRunning = false;
+      }
+    });
+  }
+
+  void stopEvaluatorLoop() {
+    evaluatorTimer.cancel();
+  }
+
+  Future<void> updateWidgetsIfNeeded() async {
+    final qryState = await StateManagerDao().getStates();
+    if (qryState.isEmpty) {
+      return;
+    }
+    for (final row in qryState) {
+      final stateName = row['stateName'] as String;
+      final stateValue = row['stateValue'] as String;
+      await StateManagerDao()
+          .upsertWidgetBuildStatusAndTimestamp(stateName: stateName);
+      // DispatchManager().stateUpdate[stateName]?.call(stateValue);
+    }
+  }
+}
+// // file: main.dart
+
+// void main() async {
+//   runApp(const MyApp()); // Triggers the flutter engine
+// }
+
+// /// Flutter engine calls build method
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     // Build method returns MaterialApp
+//     return MaterialApp(
+//       initialRoute: '/loadingscreen',
+//       onGenerateRoute: (settings) {
+//         switch (settings.name) {
+//           case '/teststatelesswidget':
+//             return MaterialPageRoute(
+//                 builder: (_) => const FirstLoadingScaffold());
+//           case '/loadingscreen':
+//             return MaterialPageRoute(
+//                 builder: (_) => const FirstLoadingScaffold());
+//           case '/gradeselectionscreen':
+//             return MaterialPageRoute(
+//                 builder: (_) => const GradeSelectionScaffold());
+//           case '/claimedprogressscreen':
+//             return MaterialPageRoute(
+//                 builder: (_) => const ClaimedProgressScaffold());
+//           case '/mathfeelingsscreen':
+//             return MaterialPageRoute(
+//                 builder: (_) => const MathFeelingsScaffold());
+//           case '/problemloadingscaffold':
+//             final isFirst = settings.arguments as bool? ?? true;
+//             return MaterialPageRoute(
+//               builder: (_) =>
+//                   ProblemLoadScaffold(isFirstProblemInSession: isFirst),
+//             );
+//           case '/problemscreen':
+//             return MaterialPageRoute(builder: (_) => problemScreen(context));
+//           default:
+//             return null;
+//         }
+//       },
+//     );
+//   }
+// }
+
+// Widget problemScreen(BuildContext context) {
+//   return MultiProvider(
+//     providers: [
+//       ChangeNotifierProvider<GridManager>(create: (_) => GridManager()),
+//       ChangeNotifierProvider<StepManager>(create: (_) => StepManager()),
+//     ],
+//     child: const ProblemScaffold(),
+//   );
+// }
+import 'package:sqflite/sqflite.dart';
+import 'package:automath/services/database_creation_service.dart';
+
+class DatabaseTableService {
+  DatabaseTableService._internal();
+
+  static final DatabaseTableService _instance =
+      DatabaseTableService._internal();
+
+  factory DatabaseTableService() => _instance;
+
+  Database? _database;
+
+  Future<void> onCreate(Database db, int version) {
+    return _onCreate(db, version);
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    await createEvalStatusStateLogTable(db);
+  }
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+
+    _database = await openDatabase(
+      inMemoryDatabasePath,
+      version: 1,
+      onCreate: DatabaseCreationService().onCreate,
+    );
+
+    return _database!;
+  }
+
+  Future<void> createEvalStatusStateLogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS state_log (
+        stateLogID  INTEGER PRIMARY KEY AUTOINCREMENT,
+        stateName TEXT NOT NULL,
+        stateValue TEXT NOT NULL,
+        buildStatus TEXT NOT NULL DEFAULT 'pending',
+        stateChangeTimestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+        widgetDispatchTimestamp INTEGER,
+        UNIQUE(stateName, stateChangeTimestamp)
+      );
+    ''');
+  }
+}
+// file: database_creation_serivce.dart
+
+import 'package:sqflite/sqflite.dart';
+import 'package:automath/services/database_table_service.dart';
+
+class DatabaseCreationService {
+  DatabaseCreationService._internal();
+
+  static final DatabaseCreationService _instance =
+      DatabaseCreationService._internal();
+
+  factory DatabaseCreationService() => _instance;
+
+  Future<void> onCreate(Database db, int version) {
+    return _onCreate(db, version);
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    await DatabaseTableService().onCreate(db, version);
+    // await ProgressionViewService().onCreate(db, version);
+  }
+}
+// file: database_view_serivce.dart
+
+import 'package:sqflite/sqflite.dart';
+import 'package:automath/services/database_creation_service.dart';
+
+class DatabaseViewService {
+  DatabaseViewService._internal();
+
+  static final DatabaseViewService _instance = DatabaseViewService._internal();
+
+  factory DatabaseViewService() => _instance;
+
+  Database? _database;
+
+  Future<void> onCreate(Database db, int version) {
+    return _onCreate(db, version);
+  }
+
+  Future<void> _onCreate(Database db, int version) async {}
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+
+    _database = await openDatabase(
+      'app_database.db',
+      version: 1,
+      onCreate: DatabaseCreationService().onCreate,
+    );
+
+    return _database!;
+  }
+
+  Future<void> createOrReplaceViews(Database db) async {
+    await createStateView(db);
+    // await createStateQueueView(db);
+  }
+
+  Future<void> createStateView(Database db) async {
+    await db.execute('''DROP VIEW IF EXISTS state_view''');
+
+    await db.execute('''
+    CREATE VIEW IF NOT EXISTS state_view AS
+    WITH state_log_filtered AS (
+            SELECT *
+              FROM state_log
+            WHERE buildStatus ='pending'
+        ),
+        add_priority AS (
+            SELECT *,
+              CASE 
+                WHEN stateName = 'evalStatus' THEN 1
+                WHEN stateName = 'otherStatus' THEN 2
+                ELSE 100 
+              END AS priority
+            FROM state_log_filtered
+        )
+        SELECT *
+          FROM add_priority
+        ORDER BY priority, stateChangeTimestamp
+    ''');
+  }
+
+  // Future<void> createStateQueueView(Database db) async {
+  //   await db.execute('''DROP VIEW IF EXISTS state_queue_view''');
+  //   await db.execute('''
+  //   CREATE VIEW IF NOT EXISTS state_queue_view AS
+  //   WITH pending_state AS (
+  //       SELECT *,
+  //             MAX(CASE WHEN buildStatus = 'building' THEN 1 ELSE 0 END) OVER (PARTITION BY stateName) AS has_building
+  //         FROM state_view
+  //   )
+  //   SELECT stateLogID,
+  //         stateName,
+  //         stateValue,
+  //         buildStatus,
+  //         stateChangeTimestamp,
+  //         priority
+  //     FROM (
+  //             SELECT *,
+  //                     MIN(stateChangeTimestamp) OVER (PARTITION BY stateName) AS minStateChangeTimestamp
+  //               FROM pending_state
+  //               WHERE buildStatus = 'pending' AND
+  //                     has_building = 0
+  //         )
+  //   WHERE stateChangeTimestamp = minStateChangeTimestamp
+  //     ''');
+  // }
+
+  // Future<void> createXxxView(Database db) async {
+  //   await db.execute('''DROP VIEW IF EXISTS queue_proportion_view''');
+  //   await db.execute('''
+  //   CREATE VIEW IF NOT EXISTS queue_10_current_level_view AS
+
+  //   ''');
+  // }
+}
+// file: state_manager_dao.dart
+import 'package:automath/services/database_table_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+
+class StateManagerDao {
+  // Singleton instance
+  static final StateManagerDao _instance = StateManagerDao._internal();
+  factory StateManagerDao() => _instance;
+  StateManagerDao._internal();
+
+  final DatabaseTableService _dbService = DatabaseTableService();
+
+  // Insert a state log entry
+  Future<void> insertStateLogEntry(String stateName, dynamic stateValue) async {
+    final db = await _dbService.database;
+
+    await db.insert(
+      'state_log',
+      {'stateName': stateName, 'stateValue': stateValue},
+    );
+    await dumpInMemoryDbToFile();
+  }
+
+  // Uses the stateChangeTimestamp to update widget build stats & tine stamps
+  Future<void> upsertWidgetBuildStatusAndTimestamp({
+    required String stateName,
+  }) async {
+    final db = await _dbService.database;
+
+    // Get earlies stateChangeTimestamp from state_view
+    final qryResult = await db.rawQuery('''
+    SELECT MIN(stateChangeTimestamp) AS minTimestamp
+    FROM state_view
+    WHERE stateName = ?
+    ''', [stateName]);
+
+    final stateChangeTimestamp = qryResult.first['minTimestamp'];
+
+    const buildStatus = "built";
+    int widgetDispatchTimestamp = DateTime.now().millisecondsSinceEpoch;
+
+    await db.execute('''
+      UPDATE state_log
+      SET buildStatus = ?, widgetDispatchTimestamp = ?
+      WHERE stateName = ? AND stateChangeTimestamp = ?
+    ''', [
+      buildStatus,
+      widgetDispatchTimestamp,
+      stateName,
+      stateChangeTimestamp
+    ]);
+
+    await dumpInMemoryDbToFile();
+  }
+
+  // Get all rows matching minimum priority
+  Future<List<Map<String, Object?>>> getStates() async {
+    final db = await _dbService.database;
+    final qryState = await db.rawQuery('''
+    SELECT stateName, stateValue
+    FROM state_view
+    WHERE priority = (
+      SELECT MIN(priority) FROM state_view
+    )
+    ORDER BY stateChangeTimestamp
+    ''');
+
+    return qryState;
+  }
+
+  Future<void> dumpInMemoryDbToFile() async {
+    final inMemoryDb = await _dbService.database;
+    final filePath = await getSimFilePath();
+
+    final file = File(filePath);
+    if (await file.exists()) {
+      await file.delete(); // ⬅️ This line forces overwrite
+    }
+
+    await inMemoryDb.execute("VACUUM INTO '$filePath'");
+  }
+
+  Future<String> getSimFilePath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/state_snapshot.db';
+  }
+}
