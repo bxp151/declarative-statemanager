@@ -2,15 +2,15 @@
 import 'package:flutter/material.dart';
 import 'package:demo/managers/dispatch_manager.dart';
 import 'package:demo/managers/state_manager.dart';
-import 'package:demo/services/database_view_service.dart';
 import 'package:demo/services/database_table_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final stateDb = await DatabaseTableService().database;
-  await DatabaseViewService().createOrReplaceViews(stateDb);
-  await StateManager().startEvaluatorLoop();
+
+  // await DatabaseViewService().createOrReplaceViews(stateDb);
+  // await StateManager().startEvaluatorLoop();
   runApp(const MyApp());
 }
 
@@ -41,32 +41,59 @@ class _DemoScaffoldState extends State<DemoScaffold> {
   // Create the GlobalKeys used access and update BoxWidget states
   final GlobalKey<BoxWidgetState> boxAkey = GlobalKey<BoxWidgetState>();
   final GlobalKey<BoxWidgetState> boxBkey = GlobalKey<BoxWidgetState>();
+
+  Future<void> _runPostFrameAsync() async {
+    // if (stateLogIDswitchA != null) {}
+
+    // if (stateLogIDswitchB != null) {}
+    // Example async code
+    // await Future.delayed(Duration(milliseconds: 100));
+    // boxAkey.currentState?.updateColor(Colors.blue);
+    // boxBkey.currentState?.updateColor(Colors.deepOrangeAccent);
+  }
+
   @override
   void initState() {
     super.initState();
     // Register GlobalKeys with DispatchManager for external state control
     DispatchManager().registerBoxAkey(boxAkey);
     DispatchManager().registerBoxBkey(boxBkey);
+
+    // This runs after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
   }
 
   bool switchA = false;
   bool switchB = false;
 
-  void handleSwitchA(bool value) {
+  late int? stateLogIDswitchA;
+  late int? stateLogIDswitchB;
+
+  Future<void> handleSwitchA(bool value) async {
     setState(() {
       switchA = value;
     });
-    StateManager().insertStateLogEntry(
-        stateName: 'switchAvalue', stateValue: switchA.toString());
+    // Insert entry into State Log table when switch A changes
+    stateLogIDswitchA = await StateManager().insertStateLogEntry(
+        originWidget: widget.runtimeType.toString(),
+        originMethod: 'handleSwitchA',
+        stateName: 'switchAvalue',
+        stateValue: switchA.toString());
     print("Switch A toggled: $value");
   }
 
-  void _handleSwitchB(bool value) {
+  Future<void> _handleSwitchB(bool value) async {
     setState(() {
       switchB = value;
     });
-    StateManager().insertStateLogEntry(
-        stateName: 'switchBvalue', stateValue: switchB.toString());
+    // Insert entry into State Log table when switch B changes
+    stateLogIDswitchB = await StateManager().insertStateLogEntry(
+        originWidget: widget.runtimeType.toString(),
+        originMethod: 'handleSwitchB',
+        stateName: 'switchBvalue',
+        stateValue: switchB.toString());
     print("Switch B toggled: $value");
   }
 

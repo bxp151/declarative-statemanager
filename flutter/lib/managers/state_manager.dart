@@ -13,9 +13,19 @@ class StateManager {
   bool _isEvaluatorRunning = false;
 
   // Insert a state log entry
-  Future<void> insertStateLogEntry(
-      {required String stateName, required stateValue}) async {
-    await StateManagerDao().insertStateLogEntry(stateName, stateValue);
+  Future<int> insertStateLogEntry({
+    required String originWidget,
+    required String originMethod,
+    required String stateName,
+    required String stateValue,
+  }) async {
+    final stepLogID = await StateManagerDao().insertStateLogEntry(
+        originWidget: originWidget,
+        originMethod: originMethod,
+        stateName: stateName,
+        stateValue: stateValue);
+
+    return stepLogID;
   }
 
   // Checks every 100ms if there are any dirty states
@@ -42,10 +52,12 @@ class StateManager {
       return;
     }
     for (final row in qryState) {
+      final stateLogID = row['stateLogID'] as int;
       final stateName = row['stateName'] as String;
       final stateValue = row['stateValue'] as String;
-      await StateManagerDao()
-          .upsertWidgetBuildStatusAndTimestamp(stateName: stateName);
+
+      // add a wrapper and pass the stateLogiD here
+      // update the dispatchTimestamp in that method
       DispatchManager().stateUpdate[stateName]?.call(stateValue);
     }
   }

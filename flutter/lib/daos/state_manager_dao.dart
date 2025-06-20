@@ -12,44 +12,45 @@ class StateManagerDao {
   final DatabaseTableService _dbService = DatabaseTableService();
 
   // Insert a state log entry
-  Future<void> insertStateLogEntry(String stateName, dynamic stateValue) async {
+  Future<int> insertStateLogEntry({
+    required String originWidget,
+    required String originMethod,
+    required String stateName,
+    required String stateValue,
+  }) async {
     final db = await _dbService.database;
 
     await db.insert(
       'state_log',
-      {'stateName': stateName, 'stateValue': stateValue},
+      {
+        'originWidget': originWidget,
+        'originMethod': originMethod,
+        'stateName': stateName,
+        'stateValue': stateValue,
+      },
     );
+
     await dumpInMemoryDbToFile();
+
+    final stepLogID = await db.rawQuery('''
+      SELECT max(stateLogID) as stepLogID
+      FROM state_log;
+    ''');
+
+    return stepLogID.first['stepLogID'] as int;
   }
 
   // Uses the stateChangeTimestamp to update widget build stats & tine stamps
-  Future<void> upsertWidgetBuildStatusAndTimestamp({
-    required String stateName,
-  }) async {
+  Future<void> updateWidgetPostFrame(
+      {required int stateLogID, required String widgetRebuildResult}) async {
     final db = await _dbService.database;
-
-    // Get earlies stateChangeTimestamp from state_view
-    final qryResult = await db.rawQuery('''
-    SELECT MIN(stateChangeTimestamp) AS minTimestamp
-    FROM state_view
-    WHERE stateName = ?
-    ''', [stateName]);
-
-    final stateChangeTimestamp = qryResult.first['minTimestamp'];
-
-    const buildStatus = "built";
-    int widgetDispatchTimestamp = DateTime.now().millisecondsSinceEpoch;
+    int destinationTimestamp = DateTime.now().millisecondsSinceEpoch;
 
     await db.execute('''
       UPDATE state_log
-      SET buildStatus = ?, widgetDispatchTimestamp = ?
-      WHERE stateName = ? AND stateChangeTimestamp = ?
-    ''', [
-      buildStatus,
-      widgetDispatchTimestamp,
-      stateName,
-      stateChangeTimestamp
-    ]);
+      SET destinationTimestamp = ?, widgetRebuildResult = ?
+      WHERE stateLogID = ?
+    ''', [destinationTimestamp, widgetRebuildResult, stateLogID]);
 
     await dumpInMemoryDbToFile();
   }
@@ -58,12 +59,15 @@ class StateManagerDao {
   Future<List<Map<String, Object?>>> getStates() async {
     final db = await _dbService.database;
     final qryState = await db.rawQuery('''
-    SELECT stateName, stateValue
-    FROM state_view
-    WHERE priority = (
-      SELECT MIN(priority) FROM state_view
-    )
-    ORDER BY stateChangeTimestamp
+    SELECT stateLogID,
+          stateName,
+          stateValue
+      FROM state_log
+    WHERE dispatchTimestamp IS NULL AND 
+          originTimestamp = (
+                                SELECT min(originTimestamp) as originTimestamp
+                                  FROM state_log
+                            );
     ''');
 
     return qryState;
@@ -79,6 +83,7 @@ class StateManagerDao {
     }
 
     await inMemoryDb.execute("VACUUM INTO '$filePath'");
+    print("Vacuumed");
   }
 
   Future<String> getSimFilePath() async {

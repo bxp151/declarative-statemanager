@@ -33,15 +33,17 @@ class DatabaseTableService {
 
   Future<void> createStateLogTable(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS state_log (
-        stateLogID  INTEGER PRIMARY KEY AUTOINCREMENT,
-        stateName TEXT NOT NULL,
-        stateValue TEXT NOT NULL,
-        buildStatus TEXT NOT NULL DEFAULT 'pending',
-        stateChangeTimestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
-        widgetDispatchTimestamp INTEGER,
-        UNIQUE(stateName, stateChangeTimestamp)
-      );
+    CREATE TABLE IF NOT EXISTS state_log (
+      stateLogID INTEGER PRIMARY KEY AUTOINCREMENT,
+      originWidget TEXT NOT NULL,
+      originMethod TEXT NOT NULL,
+      stateName TEXT NOT NULL,
+      stateValue TEXT NOT NULL,
+      originTimestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+      dispatchTimestamp INTEGER,
+      destinationTimestamp INTEGER,
+      widgetRebuildResult TEXT  
+    );
     ''');
   }
 }
