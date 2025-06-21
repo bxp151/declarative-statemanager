@@ -51,3 +51,21 @@ coverage/
 
 # Database file
 *.db
+
+# SQLite WAL mode and journaling
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Dumped simulation database
+state_snapshot.db
+
+# Performance traces
+*.trace
+*.perf
+
+# Miscellaneous test output
+test/*.tmp
+
+# Dart tool directory (with slash for clarity)
+.dart_tool/
