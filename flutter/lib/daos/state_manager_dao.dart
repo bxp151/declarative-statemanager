@@ -30,7 +30,7 @@ class StateManagerDao {
       },
     );
 
-    await dumpInMemoryDbToFile();
+    // await dumpInMemoryDbToFile();
 
     final stepLogID = await db.rawQuery('''
       SELECT max(stateLogID) as stepLogID
@@ -53,6 +53,18 @@ class StateManagerDao {
     ''', [destinationTimestamp, widgetRebuildResult, stateLogID]);
 
     await dumpInMemoryDbToFile();
+  }
+
+  Future<void> updateDispatchTimestamp({required int stateLogID}) async {
+    final db = await _dbService.database;
+    int dispatchTimestamp = DateTime.now().millisecondsSinceEpoch;
+    await db.execute('''
+      UPDATE state_log
+      SET dispatchTimestamp = ?
+      WHERE stateLogID = ?
+    ''', [dispatchTimestamp, stateLogID]);
+
+    // await dumpInMemoryDbToFile();
   }
 
   // Get all rows matching minimum priority

@@ -1,7 +1,188 @@
+// file: main.dart
+import 'package:flutter/material.dart';
+import 'package:demo/managers/dispatch_manager.dart';
+import 'package:demo/managers/state_manager.dart';
+import 'package:demo/services/database_table_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseTableService().database;
+  runApp(const MyApp());
+}
+
+// Entry point widget
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      initialRoute: '/demo',
+      routes: {
+        '/demo': (context) => const DemoScaffold(),
+      },
+    );
+  }
+}
+
+// Demo scaffold with switches and boxes
+class DemoScaffold extends StatefulWidget {
+  const DemoScaffold({super.key});
+
+  @override
+  State<DemoScaffold> createState() => _DemoScaffoldState();
+}
+
+class _DemoScaffoldState extends State<DemoScaffold> {
+  // Create the GlobalKeys for each widget state. This allows direct
+  // access to a specific widget's internal state for later updates.
+  final GlobalKey<BoxWidgetState> boxAkey = GlobalKey<BoxWidgetState>();
+  final GlobalKey<BoxWidgetState> boxBkey = GlobalKey<BoxWidgetState>();
+
+  // In _runPostFrameAsync(), call updateWidgetPostFrame() to log the widget
+  // completion time and the rebuild result. This confirms the widget has
+  // rebuilt and logs what the output looks like.
+  Future<void> _runPostFrameAsync() async {
+    if (stateLogIDswitchA != null) {
+      final appliedColor = boxAkey.currentState?._boxColor.toString();
+      await StateManager().updateWidgetPostFrame(
+        stateLogID: stateLogIDswitchA!,
+        widgetRebuildResult: appliedColor!,
+      );
+    }
+    if (stateLogIDswitchB != null) {
+      final appliedColor = boxBkey.currentState?._boxColor.toString();
+      await StateManager().updateWidgetPostFrame(
+        stateLogID: stateLogIDswitchB!,
+        widgetRebuildResult: appliedColor!,
+      );
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Register GlobalKeys with DispatchManager allowing external access
+    // to the widget
+    DispatchManager().registerBoxAkey(boxAkey);
+    DispatchManager().registerBoxBkey(boxBkey);
+
+    // This runs after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
+  }
+
+  bool switchA = false;
+  bool switchB = false;
+
+  int? stateLogIDswitchA;
+  int? stateLogIDswitchB;
+
+  // In each handleSwitchX, call the dispatchWidgetBuild() method and
+  // call _runPostFrameAsync(). This triggers the build log and queues
+  // post-frame evaluation in one step.
+  Future<void> handleSwitchA(bool value) async {
+    setState(() {
+      switchA = value;
+    });
+    // Insert entry into State Log table when switch A changes
+    stateLogIDswitchA = await StateManager().dispatchWidgetBuild(
+        originWidget: widget.runtimeType.toString(),
+        originMethod: 'handleSwitchA',
+        stateName: 'switchAvalue',
+        stateValue: switchA.toString());
+    print("Switch A toggled: $value");
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
+  }
+
+  Future<void> _handleSwitchB(bool value) async {
+    setState(() {
+      switchB = value;
+    });
+    // Insert entry into State Log table when switch B changes
+    stateLogIDswitchB = await StateManager().dispatchWidgetBuild(
+        originWidget: widget.runtimeType.toString(),
+        originMethod: 'handleSwitchB',
+        stateName: 'switchBvalue',
+        stateValue: switchB.toString());
+    print("Switch B toggled: $value");
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Declarative State')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SwitchListTile(
+              title: const Text('Switch A'),
+              onChanged: handleSwitchA,
+              value: switchA,
+            ),
+            SwitchListTile(
+              title: const Text('Switch B'),
+              onChanged: _handleSwitchB,
+              value: switchB,
+            ),
+            const SizedBox(height: 32),
+            BoxWidget(key: boxAkey, label: 'Box A'),
+            const SizedBox(height: 16),
+            BoxWidget(key: boxBkey, label: 'Box B'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Minimal placeholder box widget
+class BoxWidget extends StatefulWidget {
+  final String label;
+
+  const BoxWidget({super.key, required this.label});
+
+  @override
+  State<BoxWidget> createState() => BoxWidgetState();
+}
+
+class BoxWidgetState extends State<BoxWidget> {
+  Color _boxColor = Colors.grey;
+
+  void updateColor(Color color) {
+    setState(() {
+      _boxColor = color;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 100,
+      width: double.infinity,
+      color: _boxColor,
+      alignment: Alignment.center,
+      child: Text(
+        widget.label,
+        style: const TextStyle(fontSize: 24, color: Colors.white),
+      ),
+    );
+  }
+}
 // file: dipatch_manager.dart
 
 // import 'package:automath/widgets/feedback_tray_widget.dart';
-import 'package:flutter/widgets.dart';
+import 'package:demo/main_declarative.dart';
+import 'package:flutter/material.dart';
+import 'package:demo/daos/state_manager_dao.dart';
 
 class DispatchManager {
   // Singleton instance
@@ -9,22 +190,52 @@ class DispatchManager {
   factory DispatchManager() => _instance;
   DispatchManager._internal();
 
-  // Registers the GlobalKey
-  // GlobalKey<FeedbackTrayWidgetState>? feedbackTrayKey;
-  // void registerFeedbackTrayKey(GlobalKey<FeedbackTrayWidgetState> key) {
-  //   feedbackTrayKey = key;
-  // }
+  // Create fields and methods to register the keys. This enables the
+  // central manager to control widget state externally.
+  GlobalKey<BoxWidgetState>? boxAKey;
+  GlobalKey<BoxWidgetState>? boxBKey;
+  void registerBoxAkey(GlobalKey<BoxWidgetState> key) {
+    boxAKey = key;
+  }
+
+  void registerBoxBkey(GlobalKey<BoxWidgetState> key) {
+    boxBKey = key;
+  }
+
+  // Create mapping from stateName (user selected) and state value to the
+  // desired widget rebuild result. Here I'm mapping the switch value to a
+  // desired color based on a Boolean.
+  Map<String, void Function(String)> updateCurrentState() {
+    return {
+      'switchAvalue': (value) {
+        final color = value == 'true' ? Colors.blue : Colors.grey;
+        boxAKey?.currentState?.updateColor(color);
+      },
+      'switchBvalue': (value) {
+        final color = value == 'true' ? Colors.deepOrangeAccent : Colors.grey;
+        boxBKey?.currentState?.updateColor(color);
+      },
+    };
+  }
 
   // Call widget rebuild using the GlobalKey
-  // Map<String, void Function(String)> get stateUpdate => {
-  //       'evalStatus': (value) =>
-  //           feedbackTrayKey?.currentState?.updateEvalStatus(value),
-  //     };
+  Future<void> updateState(
+      {required int stateLogID,
+      required String stateName,
+      required dynamic stateValue}) async {
+    final stateUpdateMap = updateCurrentState();
+
+    // Dispatch widget to build
+    stateUpdateMap[stateName]?.call(stateValue.toString());
+
+    // Update the dispatch timestamp
+    await StateManagerDao().updateDispatchTimestamp(stateLogID: stateLogID);
+  }
 }
 // file: state_manager.dart
-import 'package:automath/daos/state_manager_dao.dart';
+import 'package:demo/daos/state_manager_dao.dart';
 import 'dart:async';
-import 'package:automath/managers/dispatch_manager.dart';
+import 'package:demo/managers/dispatch_manager.dart';
 
 class StateManager {
   // Singleton instance
@@ -32,106 +243,151 @@ class StateManager {
   factory StateManager() => _instance;
   StateManager._internal();
 
-  late Timer evaluatorTimer;
-  bool _isEvaluatorRunning = false;
+  Future<int> dispatchWidgetBuild({
+    required String originWidget,
+    required String originMethod,
+    required String stateName,
+    required String stateValue,
+  }) async {
+    final stateLogID = await StateManagerDao().insertStateLogEntry(
+        originWidget: originWidget,
+        originMethod: originMethod,
+        stateName: stateName,
+        stateValue: stateValue);
 
-  // Insert a state log entry
-  Future<void> insertStateLogEntry(
-      {required String stateName, required stateValue}) async {
-    await StateManagerDao().insertStateLogEntry(stateName, stateValue);
+    // Dispatches the state change and updates dispatchTimestamp
+    await DispatchManager().updateState(
+        stateLogID: stateLogID, stateName: stateName, stateValue: stateValue);
+
+    return stateLogID;
   }
 
-  // Checks every 100ms if there are any dirty states
-  Future<void> startEvaluatorLoop() async {
-    evaluatorTimer = Timer.periodic(Duration(milliseconds: 100), (_) async {
-      if (_isEvaluatorRunning) return;
-
-      _isEvaluatorRunning = true;
-      try {
-        await updateWidgetsIfNeeded();
-      } finally {
-        _isEvaluatorRunning = false;
-      }
-    });
-  }
-
-  void stopEvaluatorLoop() {
-    evaluatorTimer.cancel();
-  }
-
-  Future<void> updateWidgetsIfNeeded() async {
-    final qryState = await StateManagerDao().getStates();
-    if (qryState.isEmpty) {
-      return;
-    }
-    for (final row in qryState) {
-      final stateName = row['stateName'] as String;
-      final stateValue = row['stateValue'] as String;
-      await StateManagerDao()
-          .upsertWidgetBuildStatusAndTimestamp(stateName: stateName);
-      // DispatchManager().stateUpdate[stateName]?.call(stateValue);
-    }
+  Future<void> updateWidgetPostFrame(
+      {required int stateLogID, required String widgetRebuildResult}) async {
+    await StateManagerDao().updateWidgetPostFrame(
+        stateLogID: stateLogID, widgetRebuildResult: widgetRebuildResult);
   }
 }
-// // file: main.dart
+// file: main_imperative.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-// void main() async {
-//   runApp(const MyApp()); // Triggers the flutter engine
-// }
+void main() {
+  runApp(const MyApp());
+}
 
-// /// Flutter engine calls build method
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-//   @override
-//   Widget build(BuildContext context) {
-//     // Build method returns MaterialApp
-//     return MaterialApp(
-//       initialRoute: '/loadingscreen',
-//       onGenerateRoute: (settings) {
-//         switch (settings.name) {
-//           case '/teststatelesswidget':
-//             return MaterialPageRoute(
-//                 builder: (_) => const FirstLoadingScaffold());
-//           case '/loadingscreen':
-//             return MaterialPageRoute(
-//                 builder: (_) => const FirstLoadingScaffold());
-//           case '/gradeselectionscreen':
-//             return MaterialPageRoute(
-//                 builder: (_) => const GradeSelectionScaffold());
-//           case '/claimedprogressscreen':
-//             return MaterialPageRoute(
-//                 builder: (_) => const ClaimedProgressScaffold());
-//           case '/mathfeelingsscreen':
-//             return MaterialPageRoute(
-//                 builder: (_) => const MathFeelingsScaffold());
-//           case '/problemloadingscaffold':
-//             final isFirst = settings.arguments as bool? ?? true;
-//             return MaterialPageRoute(
-//               builder: (_) =>
-//                   ProblemLoadScaffold(isFirstProblemInSession: isFirst),
-//             );
-//           case '/problemscreen':
-//             return MaterialPageRoute(builder: (_) => problemScreen(context));
-//           default:
-//             return null;
-//         }
-//       },
-//     );
-//   }
-// }
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      initialRoute: '/demo',
+      routes: {
+        '/demo': (context) => ChangeNotifierProvider(
+              create: (_) => BoxColorManager(),
+              child: const DemoScaffold(),
+            ),
+      },
+    );
+  }
+}
 
-// Widget problemScreen(BuildContext context) {
-//   return MultiProvider(
-//     providers: [
-//       ChangeNotifierProvider<GridManager>(create: (_) => GridManager()),
-//       ChangeNotifierProvider<StepManager>(create: (_) => StepManager()),
-//     ],
-//     child: const ProblemScaffold(),
-//   );
-// }
+class BoxColorManager extends ChangeNotifier {
+  Color colorA = Colors.grey;
+  Color colorB = Colors.grey;
+
+  void updateColorA(bool isOn) {
+    colorA = isOn ? Colors.blue : Colors.grey;
+    notifyListeners();
+  }
+
+  void updateColorB(bool isOn) {
+    colorB = isOn ? Colors.deepOrangeAccent : Colors.grey;
+    notifyListeners();
+  }
+}
+
+class DemoScaffold extends StatefulWidget {
+  const DemoScaffold({super.key});
+
+  @override
+  State<DemoScaffold> createState() => _DemoScaffoldState();
+}
+
+class _DemoScaffoldState extends State<DemoScaffold> {
+  bool switchA = false;
+  bool switchB = false;
+
+  void _handleSwitchA(bool value) {
+    setState(() {
+      switchA = value;
+    });
+    context.read<BoxColorManager>().updateColorA(value);
+  }
+
+  void _handleSwitchB(bool value) {
+    setState(() {
+      switchB = value;
+    });
+    context.read<BoxColorManager>().updateColorB(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Imperative State')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SwitchListTile(
+              title: const Text('Switch A'),
+              onChanged: _handleSwitchA,
+              value: switchA,
+            ),
+            SwitchListTile(
+              title: const Text('Switch B'),
+              onChanged: _handleSwitchB,
+              value: switchB,
+            ),
+            const SizedBox(height: 32),
+            const BoxWidget(label: 'Box A', isBoxA: true),
+            const SizedBox(height: 16),
+            const BoxWidget(label: 'Box B', isBoxA: false),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BoxWidget extends StatelessWidget {
+  final String label;
+  final bool isBoxA;
+
+  const BoxWidget({super.key, required this.label, required this.isBoxA});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.select<BoxColorManager, Color>(
+      (manager) => isBoxA ? manager.colorA : manager.colorB,
+    );
+
+    return Container(
+      height: 100,
+      width: double.infinity,
+      color: color,
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 24, color: Colors.white),
+      ),
+    );
+  }
+}
 import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_creation_service.dart';
+import 'package:demo/services/database_creation_service.dart';
 
 class DatabaseTableService {
   DatabaseTableService._internal();
@@ -148,7 +404,7 @@ class DatabaseTableService {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    await createEvalStatusStateLogTable(db);
+    await createStateLogTable(db);
   }
 
   Future<Database> get database async {
@@ -163,24 +419,26 @@ class DatabaseTableService {
     return _database!;
   }
 
-  Future<void> createEvalStatusStateLogTable(Database db) async {
+  Future<void> createStateLogTable(Database db) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS state_log (
-        stateLogID  INTEGER PRIMARY KEY AUTOINCREMENT,
-        stateName TEXT NOT NULL,
-        stateValue TEXT NOT NULL,
-        buildStatus TEXT NOT NULL DEFAULT 'pending',
-        stateChangeTimestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
-        widgetDispatchTimestamp INTEGER,
-        UNIQUE(stateName, stateChangeTimestamp)
-      );
+    CREATE TABLE IF NOT EXISTS state_log (
+      stateLogID INTEGER PRIMARY KEY AUTOINCREMENT,
+      originWidget TEXT NOT NULL,
+      originMethod TEXT NOT NULL,
+      stateName TEXT NOT NULL,
+      stateValue TEXT NOT NULL,
+      originTimestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+      dispatchTimestamp INTEGER,
+      destinationTimestamp INTEGER,
+      widgetRebuildResult TEXT  
+    );
     ''');
   }
 }
 // file: database_creation_serivce.dart
 
 import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_table_service.dart';
+import 'package:demo/services/database_table_service.dart';
 
 class DatabaseCreationService {
   DatabaseCreationService._internal();
@@ -196,107 +454,10 @@ class DatabaseCreationService {
 
   Future<void> _onCreate(Database db, int version) async {
     await DatabaseTableService().onCreate(db, version);
-    // await ProgressionViewService().onCreate(db, version);
   }
-}
-// file: database_view_serivce.dart
-
-import 'package:sqflite/sqflite.dart';
-import 'package:automath/services/database_creation_service.dart';
-
-class DatabaseViewService {
-  DatabaseViewService._internal();
-
-  static final DatabaseViewService _instance = DatabaseViewService._internal();
-
-  factory DatabaseViewService() => _instance;
-
-  Database? _database;
-
-  Future<void> onCreate(Database db, int version) {
-    return _onCreate(db, version);
-  }
-
-  Future<void> _onCreate(Database db, int version) async {}
-
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-
-    _database = await openDatabase(
-      'app_database.db',
-      version: 1,
-      onCreate: DatabaseCreationService().onCreate,
-    );
-
-    return _database!;
-  }
-
-  Future<void> createOrReplaceViews(Database db) async {
-    await createStateView(db);
-    // await createStateQueueView(db);
-  }
-
-  Future<void> createStateView(Database db) async {
-    await db.execute('''DROP VIEW IF EXISTS state_view''');
-
-    await db.execute('''
-    CREATE VIEW IF NOT EXISTS state_view AS
-    WITH state_log_filtered AS (
-            SELECT *
-              FROM state_log
-            WHERE buildStatus ='pending'
-        ),
-        add_priority AS (
-            SELECT *,
-              CASE 
-                WHEN stateName = 'evalStatus' THEN 1
-                WHEN stateName = 'otherStatus' THEN 2
-                ELSE 100 
-              END AS priority
-            FROM state_log_filtered
-        )
-        SELECT *
-          FROM add_priority
-        ORDER BY priority, stateChangeTimestamp
-    ''');
-  }
-
-  // Future<void> createStateQueueView(Database db) async {
-  //   await db.execute('''DROP VIEW IF EXISTS state_queue_view''');
-  //   await db.execute('''
-  //   CREATE VIEW IF NOT EXISTS state_queue_view AS
-  //   WITH pending_state AS (
-  //       SELECT *,
-  //             MAX(CASE WHEN buildStatus = 'building' THEN 1 ELSE 0 END) OVER (PARTITION BY stateName) AS has_building
-  //         FROM state_view
-  //   )
-  //   SELECT stateLogID,
-  //         stateName,
-  //         stateValue,
-  //         buildStatus,
-  //         stateChangeTimestamp,
-  //         priority
-  //     FROM (
-  //             SELECT *,
-  //                     MIN(stateChangeTimestamp) OVER (PARTITION BY stateName) AS minStateChangeTimestamp
-  //               FROM pending_state
-  //               WHERE buildStatus = 'pending' AND
-  //                     has_building = 0
-  //         )
-  //   WHERE stateChangeTimestamp = minStateChangeTimestamp
-  //     ''');
-  // }
-
-  // Future<void> createXxxView(Database db) async {
-  //   await db.execute('''DROP VIEW IF EXISTS queue_proportion_view''');
-  //   await db.execute('''
-  //   CREATE VIEW IF NOT EXISTS queue_10_current_level_view AS
-
-  //   ''');
-  // }
 }
 // file: state_manager_dao.dart
-import 'package:automath/services/database_table_service.dart';
+import 'package:demo/services/database_table_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
@@ -309,58 +470,74 @@ class StateManagerDao {
   final DatabaseTableService _dbService = DatabaseTableService();
 
   // Insert a state log entry
-  Future<void> insertStateLogEntry(String stateName, dynamic stateValue) async {
+  Future<int> insertStateLogEntry({
+    required String originWidget,
+    required String originMethod,
+    required String stateName,
+    required String stateValue,
+  }) async {
     final db = await _dbService.database;
 
     await db.insert(
       'state_log',
-      {'stateName': stateName, 'stateValue': stateValue},
+      {
+        'originWidget': originWidget,
+        'originMethod': originMethod,
+        'stateName': stateName,
+        'stateValue': stateValue,
+      },
     );
-    await dumpInMemoryDbToFile();
+
+    // await dumpInMemoryDbToFile();
+
+    final stepLogID = await db.rawQuery('''
+      SELECT max(stateLogID) as stepLogID
+      FROM state_log;
+    ''');
+
+    return stepLogID.first['stepLogID'] as int;
   }
 
   // Uses the stateChangeTimestamp to update widget build stats & tine stamps
-  Future<void> upsertWidgetBuildStatusAndTimestamp({
-    required String stateName,
-  }) async {
+  Future<void> updateWidgetPostFrame(
+      {required int stateLogID, required String widgetRebuildResult}) async {
     final db = await _dbService.database;
-
-    // Get earlies stateChangeTimestamp from state_view
-    final qryResult = await db.rawQuery('''
-    SELECT MIN(stateChangeTimestamp) AS minTimestamp
-    FROM state_view
-    WHERE stateName = ?
-    ''', [stateName]);
-
-    final stateChangeTimestamp = qryResult.first['minTimestamp'];
-
-    const buildStatus = "built";
-    int widgetDispatchTimestamp = DateTime.now().millisecondsSinceEpoch;
+    int destinationTimestamp = DateTime.now().millisecondsSinceEpoch;
 
     await db.execute('''
       UPDATE state_log
-      SET buildStatus = ?, widgetDispatchTimestamp = ?
-      WHERE stateName = ? AND stateChangeTimestamp = ?
-    ''', [
-      buildStatus,
-      widgetDispatchTimestamp,
-      stateName,
-      stateChangeTimestamp
-    ]);
+      SET destinationTimestamp = ?, widgetRebuildResult = ?
+      WHERE stateLogID = ?
+    ''', [destinationTimestamp, widgetRebuildResult, stateLogID]);
 
     await dumpInMemoryDbToFile();
+  }
+
+  Future<void> updateDispatchTimestamp({required int stateLogID}) async {
+    final db = await _dbService.database;
+    int dispatchTimestamp = DateTime.now().millisecondsSinceEpoch;
+    await db.execute('''
+      UPDATE state_log
+      SET dispatchTimestamp = ?
+      WHERE stateLogID = ?
+    ''', [dispatchTimestamp, stateLogID]);
+
+    // await dumpInMemoryDbToFile();
   }
 
   // Get all rows matching minimum priority
   Future<List<Map<String, Object?>>> getStates() async {
     final db = await _dbService.database;
     final qryState = await db.rawQuery('''
-    SELECT stateName, stateValue
-    FROM state_view
-    WHERE priority = (
-      SELECT MIN(priority) FROM state_view
-    )
-    ORDER BY stateChangeTimestamp
+    SELECT stateLogID,
+          stateName,
+          stateValue
+      FROM state_log
+    WHERE dispatchTimestamp IS NULL AND 
+          originTimestamp = (
+                                SELECT min(originTimestamp) as originTimestamp
+                                  FROM state_log
+                            );
     ''');
 
     return qryState;
@@ -376,6 +553,7 @@ class StateManagerDao {
     }
 
     await inMemoryDb.execute("VACUUM INTO '$filePath'");
+    print("Vacuumed");
   }
 
   Future<String> getSimFilePath() async {

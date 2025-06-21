@@ -6,11 +6,7 @@ import 'package:demo/services/database_table_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  final stateDb = await DatabaseTableService().database;
-
-  // await DatabaseViewService().createOrReplaceViews(stateDb);
-  // await StateManager().startEvaluatorLoop();
+  await DatabaseTableService().database;
   runApp(const MyApp());
 }
 
@@ -38,24 +34,36 @@ class DemoScaffold extends StatefulWidget {
 }
 
 class _DemoScaffoldState extends State<DemoScaffold> {
-  // Create the GlobalKeys used access and update BoxWidget states
+  // Create the GlobalKeys for each widget state. This allows direct
+  // access to a specific widget's internal state for later updates.
   final GlobalKey<BoxWidgetState> boxAkey = GlobalKey<BoxWidgetState>();
   final GlobalKey<BoxWidgetState> boxBkey = GlobalKey<BoxWidgetState>();
 
+  // In _runPostFrameAsync(), call updateWidgetPostFrame() to log the widget
+  // completion time and the rebuild result. This confirms the widget has
+  // rebuilt and logs what the output looks like.
   Future<void> _runPostFrameAsync() async {
-    // if (stateLogIDswitchA != null) {}
-
-    // if (stateLogIDswitchB != null) {}
-    // Example async code
-    // await Future.delayed(Duration(milliseconds: 100));
-    // boxAkey.currentState?.updateColor(Colors.blue);
-    // boxBkey.currentState?.updateColor(Colors.deepOrangeAccent);
+    if (stateLogIDswitchA != null) {
+      final appliedColor = boxAkey.currentState?._boxColor.toString();
+      await StateManager().updateWidgetPostFrame(
+        stateLogID: stateLogIDswitchA!,
+        widgetRebuildResult: appliedColor!,
+      );
+    }
+    if (stateLogIDswitchB != null) {
+      final appliedColor = boxAkey.currentState?._boxColor.toString();
+      await StateManager().updateWidgetPostFrame(
+        stateLogID: stateLogIDswitchB!,
+        widgetRebuildResult: appliedColor!,
+      );
+    }
   }
 
   @override
   void initState() {
     super.initState();
-    // Register GlobalKeys with DispatchManager for external state control
+    // Register GlobalKeys with DispatchManager allowing external access
+    // to the widget
     DispatchManager().registerBoxAkey(boxAkey);
     DispatchManager().registerBoxBkey(boxBkey);
 
@@ -68,20 +76,27 @@ class _DemoScaffoldState extends State<DemoScaffold> {
   bool switchA = false;
   bool switchB = false;
 
-  late int? stateLogIDswitchA;
-  late int? stateLogIDswitchB;
+  int? stateLogIDswitchA;
+  int? stateLogIDswitchB;
 
+  // In each handleSwitchX, call the dispatchWidgetBuild() method and
+  // call _runPostFrameAsync(). This triggers the build log and queues
+  // post-frame evaluation in one step.
   Future<void> handleSwitchA(bool value) async {
     setState(() {
       switchA = value;
     });
     // Insert entry into State Log table when switch A changes
-    stateLogIDswitchA = await StateManager().insertStateLogEntry(
+    stateLogIDswitchA = await StateManager().dispatchWidgetBuild(
         originWidget: widget.runtimeType.toString(),
         originMethod: 'handleSwitchA',
         stateName: 'switchAvalue',
         stateValue: switchA.toString());
     print("Switch A toggled: $value");
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
   }
 
   Future<void> _handleSwitchB(bool value) async {
@@ -89,12 +104,15 @@ class _DemoScaffoldState extends State<DemoScaffold> {
       switchB = value;
     });
     // Insert entry into State Log table when switch B changes
-    stateLogIDswitchB = await StateManager().insertStateLogEntry(
+    stateLogIDswitchB = await StateManager().dispatchWidgetBuild(
         originWidget: widget.runtimeType.toString(),
         originMethod: 'handleSwitchB',
         stateName: 'switchBvalue',
         stateValue: switchB.toString());
     print("Switch B toggled: $value");
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runPostFrameAsync();
+    });
   }
 
   @override
